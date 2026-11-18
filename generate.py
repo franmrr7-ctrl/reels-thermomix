@@ -230,7 +230,9 @@ def main(src, dst):
 
     # musica ambiente generada por codigo (sin derechos de autor)
     wav = os.path.join(tmp, "musica.wav")
-    make_music(wav, total + 0.5)
+    # la musica cambia de una receta a otra (segun el nombre de la receta)
+    variant = sum(ord(c) for c in str(data.get("name", data["titulo"]))) % len(MUSIC_PRESETS)
+    make_music(wav, total + 0.5, variant=variant)
     part = dst + ".part.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", silent, "-i", wav,
                     "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
@@ -240,11 +242,20 @@ def main(src, dst):
     print(f"ok: {dst} ({total:.1f} s)")
 
 
-def make_music(path, seconds, sr=32000):
+MUSIC_PRESETS = [
+    # (bpm, acordes (4 por ciclo), raices, swing del hi-hat, nombre)
+    (84, [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 64]], [36, 33, 29, 31], 0.14),  # Cmaj7 Am7 Fmaj7 G6
+    (92, [[62, 65, 69, 72], [58, 62, 65, 69], [55, 58, 62, 65], [57, 61, 64, 67]], [38, 34, 31, 33], 0.10),  # Dm7 Bbmaj7 Gm7 A7
+    (78, [[65, 69, 72, 76], [62, 65, 69, 72], [58, 62, 65, 69], [60, 64, 67, 70]], [41, 38, 34, 36], 0.17),  # Fmaj7 Dm7 Bbmaj7 C7
+    (88, [[67, 71, 74, 78], [64, 67, 71, 74], [60, 64, 67, 71], [62, 66, 69, 72]], [43, 40, 36, 38], 0.12),  # Gmaj7 Em7 Cmaj7 D7
+]
+
+
+def make_music(path, seconds, sr=32000, variant=0):
     """Base lo-fi tranquila generada por codigo (sin derechos): piano electrico, bajo y percusion suave."""
     import numpy as np
 
-    bpm = 84
+    bpm, chords, roots, swing = MUSIC_PRESETS[variant % len(MUSIC_PRESETS)]
     beat = 60.0 / bpm
     n = int(seconds * sr)
     t = np.arange(n) / sr
@@ -254,9 +265,7 @@ def make_music(path, seconds, sr=32000):
     def midi(m):
         return 440.0 * 2 ** ((m - 69) / 12)
 
-    # Cmaj7 - Am7 - Fmaj7 - G6 (una barra de 4 tiempos por acorde)
-    chords = [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 64]]
-    roots = [36, 33, 29, 31]
+    # una barra de 4 tiempos por acorde
 
     def add(start, sig):
         i = int(start * sr)
@@ -297,7 +306,7 @@ def make_music(path, seconds, sr=32000):
             add(t0 + hit * beat, 0.16 * np.exp(-18 * d) * noise)
         # hi-hat en corcheas con swing
         for q in range(8):
-            off = (q * 0.5) + (0.14 if q % 2 else 0.0)
+            off = (q * 0.5) + (swing if q % 2 else 0.0)
             d = np.arange(int(0.06 * sr)) / sr
             noise = rng.standard_normal(len(d))
             noise = noise - np.convolve(noise, np.ones(4) / 4, mode="same")
