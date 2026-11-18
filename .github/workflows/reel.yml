@@ -3,13 +3,30 @@ name: Generar Reel
 on:
   workflow_dispatch:
     inputs:
-      data:
-        description: "JSON de la receta (ver examples/bizcocho-marmol.json)"
-        required: true
       name:
         description: "Nombre del archivo (sin extension)"
-        required: false
-        default: "reel"
+        required: true
+      photo_url:
+        required: true
+      titulo:
+        description: "Titulo (lineas separadas por salto de linea)"
+        required: true
+      gancho:
+        required: true
+      ingredientes:
+        required: true
+      p1_titulo:
+        required: true
+      p1_texto:
+        required: true
+      p2_titulo:
+        required: true
+      p2_texto:
+        required: true
+      p3_titulo:
+        required: true
+      p3_texto:
+        required: true
 
 permissions:
   contents: write
@@ -26,11 +43,36 @@ jobs:
           pip install --quiet pillow
       - name: Generar el Reel
         env:
-          RECIPE_JSON: ${{ inputs.data }}
-          REEL_NAME: ${{ inputs.name }}
+          IN_NAME: ${{ inputs.name }}
+          IN_PHOTO: ${{ inputs.photo_url }}
+          IN_TITULO: ${{ inputs.titulo }}
+          IN_GANCHO: ${{ inputs.gancho }}
+          IN_ING: ${{ inputs.ingredientes }}
+          IN_P1T: ${{ inputs.p1_titulo }}
+          IN_P1X: ${{ inputs.p1_texto }}
+          IN_P2T: ${{ inputs.p2_titulo }}
+          IN_P2X: ${{ inputs.p2_texto }}
+          IN_P3T: ${{ inputs.p3_titulo }}
+          IN_P3X: ${{ inputs.p3_texto }}
         run: |
-          printf '%s' "$RECIPE_JSON" > receta.json
-          name=$(printf '%s' "$REEL_NAME" | tr -c 'a-zA-Z0-9_-' '-')
+          python - <<'PY'
+          import json, os
+          e = os.environ
+          data = {
+              "photo_url": e["IN_PHOTO"],
+              "titulo": e["IN_TITULO"],
+              "gancho": e["IN_GANCHO"],
+              "ingredientes": e["IN_ING"],
+              "pasos": [
+                  {"titulo": e["IN_P1T"], "texto": e["IN_P1X"]},
+                  {"titulo": e["IN_P2T"], "texto": e["IN_P2X"]},
+                  {"titulo": e["IN_P3T"], "texto": e["IN_P3X"]},
+              ],
+              "cta": "recetasthermomix.net",
+          }
+          json.dump(data, open("receta.json", "w"), ensure_ascii=False)
+          PY
+          name=$(printf '%s' "$IN_NAME" | tr -c 'a-zA-Z0-9_-' '-')
           python generate.py receta.json "$name.mp4"
           echo "FILE=$name.mp4" >> "$GITHUB_ENV"
           echo "TAG=reel-$name-${{ github.run_id }}" >> "$GITHUB_ENV"
@@ -38,5 +80,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$TAG" "$FILE" --title "$TAG" --notes "Reel generado automaticamente"
-      - name: Resumen
-        run: echo "https://github.com/${{ github.repository }}/releases/download/$TAG/$FILE" >> "$GITHUB_STEP_SUMMARY"
