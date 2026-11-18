@@ -18,10 +18,8 @@ Formato del JSON (ver examples/bizcocho-marmol.json):
 }
 """
 import json
-import math
 import os
 import re
-import struct
 import subprocess
 import sys
 import tempfile
@@ -236,35 +234,87 @@ def main(src, dst):
     part = dst + ".part.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", silent, "-i", wav,
                     "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
-                    "-af", f"afade=t=in:st=0:d=0.8,afade=t=out:st={total-1.5}:d=1.5",
+                    "-af", f"aecho=0.8:0.6:60|120:0.25|0.15,lowpass=f=7000,loudnorm=I=-18:TP=-2:LRA=7,afade=t=in:st=0:d=0.8,afade=t=out:st={total-1.5}:d=1.5",
                     "-t", str(total), "-movflags", "+faststart", part], check=True)
     os.replace(part, dst)
     print(f"ok: {dst} ({total:.1f} s)")
 
 
 def make_music(path, seconds, sr=32000):
-    """Arpegio suave sobre C - Am - F - G con un colchon de acordes. Volumen bajo."""
-    chords = [[261.63, 329.63, 392.0], [220.0, 261.63, 329.63], [174.61, 220.0, 261.63], [196.0, 246.94, 293.66]]
-    bpm, n = 96, int(seconds * sr)
-    beat = 60.0 / bpm / 2  # corcheas
-    frames = bytearray()
-    for i in range(n):
-        t = i / sr
-        ci = int(t / (beat * 8)) % 4
-        ch = chords[ci]
-        k = int(t / beat)
-        f = ch[[0, 1, 2, 1, 0, 1, 2, 1][k % 8]] * 2
-        tb = t - k * beat
-        env = math.exp(-5.0 * tb)
-        pluck = env * (math.sin(2 * math.pi * f * t) + 0.35 * math.sin(4 * math.pi * f * t)) * 0.32
-        pad = sum(math.sin(2 * math.pi * fr * t) for fr in ch) * 0.07 * (0.8 + 0.2 * math.sin(2 * math.pi * 0.25 * t))
-        v = max(-1.0, min(1.0, (pluck + pad) * 0.8))
-        frames += struct.pack("<h", int(v * 32767))
+    """Base lo-fi tranquila generada por codigo (sin derechos): piano electrico, bajo y percusion suave."""
+    import numpy as np
+
+    bpm = 84
+    beat = 60.0 / bpm
+    n = int(seconds * sr)
+    t = np.arange(n) / sr
+    mix = np.zeros(n)
+    rng = np.random.default_rng(7)
+
+    def midi(m):
+        return 440.0 * 2 ** ((m - 69) / 12)
+
+    # Cmaj7 - Am7 - Fmaj7 - G6 (una barra de 4 tiempos por acorde)
+    chords = [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 64]]
+    roots = [36, 33, 29, 31]
+
+    def add(start, sig):
+        i = int(start * sr)
+        if i >= n:
+            return
+        seg = sig[: n - i]
+        mix[i : i + len(seg)] += seg
+
+    def epiano(freq, dur, vel):
+        tt = np.arange(int(dur * sr)) / sr
+        env = np.exp(-2.6 * tt) * (1 - np.exp(-tt * 90))
+        mod = np.sin(2 * np.pi * freq * tt) * 1.4 * np.exp(-5 * tt)
+        return vel * env * (np.sin(2 * np.pi * freq * tt + mod) + 0.25 * np.sin(2 * np.pi * freq * 2 * tt) * np.exp(-4 * tt))
+
+    bar = 0
+    while bar * 4 * beat < seconds:
+        k = bar % 4
+        t0 = bar * 4 * beat
+        notes = chords[k]
+        # acorde en el tiempo 1 y sincopado en el "y" del 2, con rasgueo suave
+        for hit, vel in ((0.0, 0.16), (1.5, 0.11), (2.75, 0.09)):
+            for j, m in enumerate(notes):
+                add(t0 + hit * beat + j * 0.018, epiano(midi(m), 2.2, vel))
+        # bajo en 1 y 3
+        for hit in (0.0, 2.0):
+            d = np.arange(int(1.4 * sr)) / sr
+            f = midi(roots[k])
+            add(t0 + hit * beat, 0.34 * np.exp(-2.2 * d) * (np.sin(2 * np.pi * f * d) + 0.3 * np.sin(4 * np.pi * f * d)))
+        # bombo en 1 y 3
+        for hit in (0.0, 2.0):
+            d = np.arange(int(0.3 * sr)) / sr
+            add(t0 + hit * beat, 0.42 * np.exp(-14 * d) * np.sin(2 * np.pi * (48 + 90 * np.exp(-30 * d)) * d))
+        # caja suave en 2 y 4
+        for hit in (1.0, 3.0):
+            d = np.arange(int(0.22 * sr)) / sr
+            noise = rng.standard_normal(len(d))
+            noise = np.convolve(noise, np.ones(6) / 6, mode="same")
+            add(t0 + hit * beat, 0.16 * np.exp(-18 * d) * noise)
+        # hi-hat en corcheas con swing
+        for q in range(8):
+            off = (q * 0.5) + (0.14 if q % 2 else 0.0)
+            d = np.arange(int(0.06 * sr)) / sr
+            noise = rng.standard_normal(len(d))
+            noise = noise - np.convolve(noise, np.ones(4) / 4, mode="same")
+            add(t0 + off * beat, (0.07 if q % 2 else 0.045) * np.exp(-60 * d) * noise)
+        bar += 1
+
+    # filtro paso bajo suave (sonido calido) y normalizacion
+    kern = np.ones(3) / 3
+    mix = np.convolve(mix, kern, mode="same")
+    peak = np.max(np.abs(mix)) or 1.0
+    mix = mix / peak * 0.55
+    pcm = (mix * 32767).astype("<i2")
     with wave.open(path, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sr)
-        w.writeframes(bytes(frames))
+        w.writeframes(pcm.tobytes())
 
 
 if __name__ == "__main__":
