@@ -1,0 +1,12 @@
+{
+  "photo_url": "https://recetasthermomix.net/wp-content/uploads/2026/11/bizcocho-para-la-merienda-negro-y-blanco.jpg",
+  "titulo": ["Bizcocho", "mármol"],
+  "gancho": ["Merienda de dos colores", "¡Con un solo vaso Thermomix!"],
+  "ingredientes": ["2 huevos", "180 g de azúcar", "315 g de leche", "100 g de aceite de oliva", "400 g de harina", "16 g de levadura", "30 g de cacao amargo", "40 g de chocolate de cobertura", "Piel de ½ limón"],
+  "pasos": [
+    {"titulo": ["La masa", "base"], "texto": ["Mariposa: huevos + azúcar, 3 min · vel 3", "Leche + aceite, 15 s · vel 3", "Harina + levadura, 6 s · vel 3"]},
+    {"titulo": ["El toque", "de cacao"], "texto": ["La mitad de la masa al molde, con la ralladura de limón", "A la otra mitad, 30 g de cacao: 6 s · vel 3", "Añade el chocolate troceado"]},
+    {"titulo": ["Marmolea", "y hornea"], "texto": ["Masa de cacao sobre la blanca", "Remueve suave con un palito", "Horno a 170 °C · unos 50 min"]}
+  ],
+  "cta": "recetasthermomix.net"
+}
