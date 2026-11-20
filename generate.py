@@ -149,7 +149,7 @@ def main(src, dst):
     bg.save(bg_path)
 
     # foto para el panel: cubre al menos PANEL_H de alto y W de ancho, con margen para el paneo
-    ps = max(900 / photo.height, (W + 120) / photo.width)
+    ps = max(PANEL_H * 1.12 / photo.height, (W + 100) / photo.width)
     pw, ph = int(photo.width * ps), int(photo.height * ps)
     panel = photo.resize((pw, ph), Image.LANCZOS)
     panel_path = os.path.join(tmp, "panel.jpg")
@@ -162,7 +162,7 @@ def main(src, dst):
     cta = data.get("cta", "recetasthermomix.net")
 
     # portada a pantalla completa (zoom lento): la foto cubre 1080x1920 con margen
-    HERO_H = 1150
+    HERO_H = 960
     hs = max(HERO_H * 1.0 / photo.height, W * 1.0 / photo.width)
     hero = photo.resize((int(photo.width * hs), int(photo.height * hs)), Image.LANCZOS)
     hero_path = os.path.join(tmp, "hero.jpg")
@@ -200,7 +200,7 @@ def main(src, dst):
                 f"fade=t=in:st=0:d=0.2,fade=t=out:st={dur-0.2}:d=0.2[v]")
         if hero_scene:
             fc = (text_fx + bar_fx +
-                  f"[1:v]scale=w='iw*(1+0.09*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H},eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
+                  f"[1:v]scale=w='iw*(1+0.04*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H},eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
                   f"[0:v][h]overlay=0:0[a];[a][t]" + end)
             inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
         else:
@@ -215,7 +215,7 @@ def main(src, dst):
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", layer,
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bar_path,
                "-filter_complex", fc, "-map", "[v]", "-r", "30",
-               "-c:v", "libx264", "-crf", "18", "-preset", "veryfast", "-pix_fmt", "yuv420p", out]
+               "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]
         subprocess.run(cmd, check=True)
         files.append(out)
         offset += dur
