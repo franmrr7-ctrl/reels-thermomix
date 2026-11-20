@@ -18,7 +18,7 @@ Formato del JSON (ver examples/bizcocho-marmol.json):
 }
 """
 import json
-import os
+import os, glob
 import re
 import subprocess
 import sys
@@ -193,11 +193,14 @@ def main(src, dst):
                    y0=(1040 if hero_scene else TEXT_Y), chips=chips, gradient=hero_scene)
         out = os.path.join(tmp, f"{name}.mp4")
         # el texto entra con un pequeno deslizamiento hacia arriba
-        text_fx = (f"[2:v]format=rgba,fade=t=in:st=0.1:d=0.35:alpha=1[t];")
+        # en la portada (escena 1) el texto ya esta visible desde el primer fotograma: asi Facebook lo usa como miniatura
+        text_fx = ("[2:v]format=rgba[t];" if hero_scene else "[2:v]format=rgba,fade=t=in:st=0.1:d=0.35:alpha=1[t];")
+        slide = "0" if hero_scene else "if(lt(t,0.45),36*(1-t/0.45),0)"
+        fin = "" if hero_scene else "fade=t=in:st=0:d=0.2,"
         bar_fx = f"[3:v]format=rgba[b];"
-        end = (f"overlay=0:'if(lt(t,0.45),36*(1-t/0.45),0)'[x];"
+        end = (f"overlay=0:'{slide}'[x];"
                 f"[x][b]overlay=x='-{W}+{W}*({offset}+t)/{total}':y=0,format=yuv420p,"
-                f"fade=t=in:st=0:d=0.2,fade=t=out:st={dur-0.2}:d=0.2[v]")
+                f"{fin}fade=t=out:st={dur-0.2}:d=0.2[v]")
         if hero_scene:
             fc = (text_fx + bar_fx +
                   f"[1:v]scale=w='iw*(1+0.04*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H},eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
@@ -228,15 +231,23 @@ def main(src, dst):
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst,
                     "-c", "copy", silent], check=True)
 
-    # musica ambiente generada por codigo (sin derechos de autor)
+    # musica: pista CC0 real (carpeta music/) rotando por receta; si falla, musica sintetica
+    key = sum(ord(c) for c in str(data.get("name", data["titulo"])))
+    tracks = sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "music", "*.m4a")))
     wav = os.path.join(tmp, "musica.wav")
-    # la musica cambia de una receta a otra (segun el nombre de la receta)
-    variant = sum(ord(c) for c in str(data.get("name", data["titulo"]))) % len(MUSIC_PRESETS)
-    make_music(wav, total + 0.5, variant=variant)
+    done = False
+    if tracks:
+        tr = tracks[key % len(tracks)]
+        off = 4 + (key * 7) % 50  # segundo de inicio distinto en cada receta
+        r = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(off), "-i", tr,
+                            "-t", str(total + 0.5), "-ac", "2", "-ar", "44100", wav])
+        done = r.returncode == 0 and os.path.exists(wav)
+    if not done:
+        make_music(wav, total + 0.5, variant=key % len(MUSIC_PRESETS))
     part = dst + ".part.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", silent, "-i", wav,
                     "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k",
-                    "-af", f"aecho=0.8:0.6:60|120:0.25|0.15,lowpass=f=7000,loudnorm=I=-18:TP=-2:LRA=7,afade=t=in:st=0:d=0.8,afade=t=out:st={total-1.5}:d=1.5",
+                    "-af", f"loudnorm=I=-18:TP=-2:LRA=7,afade=t=in:st=0:d=0.8,afade=t=out:st={total-1.5}:d=1.5",
                     "-t", str(total), "-movflags", "+faststart", part], check=True)
     os.replace(part, dst)
     print(f"ok: {dst} ({total:.1f} s)")
