@@ -162,7 +162,7 @@ def main(src, dst):
     cta = data.get("cta", "recetasthermomix.net")
 
     # portada a pantalla completa (zoom lento): la foto cubre 1080x1920 con margen
-    HERO_H = 1300
+    HERO_H = 1150
     hs = max(HERO_H * 1.0 / photo.height, W * 1.0 / photo.width)
     hero = photo.resize((int(photo.width * hs), int(photo.height * hs)), Image.LANCZOS)
     hero_path = os.path.join(tmp, "hero.jpg")
@@ -170,15 +170,15 @@ def main(src, dst):
 
     # (nombre, duracion, kicker, titulo, cuerpo, extra, tam titulo, tam cuerpo, vinetas, paneo, chips)
     scenes = [
-        ("s1", 2.5, None, as_lines(data["titulo"]), as_lines(data["gancho"]), None, 104, 56, False, None, None),
-        ("s2", min(4.5, 1.8 + 0.3 * len(ing)), "INGREDIENTES", [], ing, None, 80, 50, True, (0.9, 0.3), None),
+        ("s1", 2.2, None, as_lines(data["titulo"]), as_lines(data["gancho"]), None, 104, 56, False, None, None),
+        ("s2", min(4.0, 1.5 + 0.28 * len(ing)), "INGREDIENTES", [], ing, None, 80, 50, True, (0.9, 0.3), None),
     ]
     for i, p in enumerate(pasos, 1):
         body = as_lines(p["texto"])
-        dur = min(4.2, 2.2 + 0.4 * len(body))
+        dur = min(3.8, 2.0 + 0.4 * len(body))
         scenes.append((f"s{i+2}", dur, f"PASO {i}", as_lines(p["titulo"]), body, None, 80, 50, True,
                        ((0.4, 0.8) if i % 2 else (0.8, 0.3)), chips_from(body)))
-    scenes.append(("s6", 2.5, None, ["Receta", "completa"], [cta, "Paso a paso en el primer comentario"],
+    scenes.append(("s6", 2.2, None, ["Receta", "completa"], [cta, "Paso a paso en el primer comentario"],
                    None, 96, 54, False, (0.2, 0.5), None))
     total = sum(sc[1] for sc in scenes)
 
@@ -190,7 +190,7 @@ def main(src, dst):
         layer = os.path.join(tmp, f"{name}.png")
         hero_scene = pan is None
         text_layer(layer, kicker, title, body, body_size=bsz, title_size=tsz, extra=extra, bullets=bul,
-                   y0=(1090 if hero_scene else TEXT_Y), chips=chips, gradient=hero_scene)
+                   y0=(1040 if hero_scene else TEXT_Y), chips=chips, gradient=hero_scene)
         out = os.path.join(tmp, f"{name}.mp4")
         # el texto entra con un pequeno deslizamiento hacia arriba
         text_fx = (f"[2:v]format=rgba,fade=t=in:st=0.1:d=0.35:alpha=1[t];")
@@ -200,14 +200,14 @@ def main(src, dst):
                 f"fade=t=in:st=0:d=0.2,fade=t=out:st={dur-0.2}:d=0.2[v]")
         if hero_scene:
             fc = (text_fx + bar_fx +
-                  f"[1:v]scale=w='iw*(1+0.07*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H}[h];"
+                  f"[1:v]scale=w='iw*(1+0.09*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H},eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
                   f"[0:v][h]overlay=0:0[a];[a][t]" + end)
             inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
         else:
             x0, x1 = int(max_x * pan[0]), int(max_x * pan[1])
             y0p = max_y // 2
             fc = (text_fx + bar_fx +
-                  f"[1:v]crop={W}:{PANEL_H}:x='{x0}+({x1}-{x0})*t/{dur}':y={y0p}[c];"
+                  f"[1:v]crop={W}:{PANEL_H}:x='{x0}+({x1}-{x0})*t/{dur}':y={y0p},eq=saturation=1.12:contrast=1.05,unsharp=5:5:0.6[c];"
                   f"[0:v][c]overlay=0:{PANEL_Y}[a];[a][t]" + end)
             inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
         cmd = ["ffmpeg", "-y", "-loglevel", "error"] + inputs + [
