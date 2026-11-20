@@ -38,8 +38,11 @@ PANEL_Y = 150
 TEXT_Y = 880  # inicio del texto (deja libre el borde inferior de la interfaz de Facebook)
 
 
+SS = 2  # supersampling del texto: se dibuja al doble y se reduce con Lanczos
+
+
 def font(size, weight="ExtraBold"):
-    f = ImageFont.truetype(FONT, size)
+    f = ImageFont.truetype(FONT, int(size * SS))
     try:
         f.set_variation_by_name(weight)
     except Exception:
@@ -82,10 +85,34 @@ def chips_from(lines, limit=4):
     return found[:limit]
 
 
+class _SD:
+    """Dibujante que escala coordenadas y tamanos por SS."""
+    def __init__(self, d):
+        self.d = d
+
+    def text(self, xy, t, font=None, fill=None):
+        self.d.text((xy[0] * SS, xy[1] * SS), t, font=font, fill=fill)
+
+    def line(self, xy, fill=None):
+        self.d.line(tuple(v * SS for v in xy), fill=fill, width=SS)
+
+    def rectangle(self, xy, fill=None):
+        self.d.rectangle(tuple(v * SS for v in xy), fill=fill)
+
+    def ellipse(self, xy, fill=None):
+        self.d.ellipse(tuple(v * SS for v in xy), fill=fill)
+
+    def rounded_rectangle(self, xy, radius=0, fill=None):
+        self.d.rounded_rectangle(tuple(v * SS for v in xy), radius=radius * SS, fill=fill)
+
+    def textlength(self, t, font=None):
+        return self.d.textlength(t, font=font) / SS
+
+
 def text_layer(path, kicker, title_lines, body, body_size=54, title_size=80, extra=None, bullets=True,
                y0=TEXT_Y, chips=None, gradient=False):
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+    big = Image.new("RGBA", (W * SS, H * SS), (0, 0, 0, 0))
+    d = _SD(ImageDraw.Draw(big))
     if gradient:
         for yy in range(820, H):
             a = int(255 * min(1.0, (yy - 820) / 480))
@@ -120,7 +147,7 @@ def text_layer(path, kicker, title_lines, body, body_size=54, title_size=80, ext
         y += 22
     if extra:
         d.text((60, y + 10), extra, font=font(40, "Bold"), fill=LEMON)
-    img.save(path)
+    big.resize((W, H), Image.LANCZOS).save(path)
 
 
 def as_lines(v):
@@ -199,7 +226,7 @@ def main(src, dst):
         fin = "" if hero_scene else "fade=t=in:st=0:d=0.2,"
         bar_fx = f"[3:v]format=rgba[b];"
         end = (f"overlay=0:'{slide}'[x];"
-                f"[x][b]overlay=x='-{W}+{W}*({offset}+t)/{total}':y=0,format=yuv420p,"
+                f"[x][b]overlay=x='-{W}+{W}*({offset}+t)/{total}':y=0,scale=flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=bt709,format=yuv420p,"
                 f"{fin}fade=t=out:st={dur-0.2}:d=0.2[v]")
         if hero_scene:
             fc = (text_fx + bar_fx +
@@ -218,7 +245,8 @@ def main(src, dst):
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", layer,
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bar_path,
                "-filter_complex", fc, "-map", "[v]", "-r", "30",
-               "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", out]
+               "-c:v", "libx264", "-crf", "12", "-preset", "slow", "-pix_fmt", "yuv420p",
+               "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", out]
         subprocess.run(cmd, check=True)
         files.append(out)
         offset += dur
