@@ -29,10 +29,11 @@ import wave
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H = 1080, 1920
-FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "Montserrat-VF.ttf")
-CREAM = (250, 238, 218, 255)
-LEMON = (244, 201, 76, 255)
-CHOC = (30, 20, 16)
+FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "JosefinSans-VF.ttf")
+# Marca Recetas Thermomix: negro y dorado del logo (#B88828, aclarado para leerse sobre negro) y tipografia Josefin Sans
+CREAM = (250, 247, 240, 255)
+LEMON = (214, 164, 58, 255)
+CHOC = (10, 10, 10)
 PANEL_H = 700  # alto de la foto en pantalla
 PANEL_Y = 150
 TEXT_Y = 880  # inicio del texto (deja libre el borde inferior de la interfaz de Facebook)
@@ -44,7 +45,7 @@ SS = 2  # supersampling del texto: se dibuja al doble y se reduce con Lanczos
 def font(size, weight="ExtraBold"):
     f = ImageFont.truetype(FONT, int(size * SS))
     try:
-        f.set_variation_by_name(weight)
+        f.set_variation_by_name("Bold" if weight in ("ExtraBold", "Black", "Bold") else weight)
     except Exception:
         pass
     return f
@@ -117,6 +118,9 @@ def text_layer(path, kicker, title_lines, body, body_size=54, title_size=80, ext
         for yy in range(820, H):
             a = int(255 * min(1.0, (yy - 820) / 480))
             d.line((0, yy, W, yy), fill=CHOC + (a,))
+    if gradient:  # degradado oscuro arriba para que la marca se lea sobre la foto de la portada
+        for yy in range(0, 260):
+            d.line((0, yy, W, yy), fill=CHOC + (int(210 * (1 - yy / 260)),))
     d.text((60, 80), "RECETAS THERMOMIX", font=font(34, "Bold"), fill=LEMON)
     d.rectangle((60, 128, 200, 133), fill=LEMON)
     y = y0
