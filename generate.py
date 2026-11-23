@@ -161,9 +161,20 @@ def main(src, dst):
     tmp = tempfile.mkdtemp(prefix="reel_")
 
     photo_path = os.path.join(tmp, "foto")
-    req = urllib.request.Request(data["photo_url"], headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as r, open(photo_path, "wb") as f:
-        f.write(r.read())
+    import re
+    url0 = data["photo_url"]
+    # WordPress guarda miniaturas "nombre-300x200.jpg": probamos primero el original a maxima resolucion
+    cands = [re.sub(r"-\d{2,4}x\d{2,4}(\.[A-Za-z]+)$", r"\1", url0), url0]
+    blob = None
+    for u in dict.fromkeys(cands):
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                blob = r.read()
+            break
+        except Exception as ex:
+            print("foto no disponible:", u, ex)
+    open(photo_path, "wb").write(blob)
     photo = Image.open(photo_path).convert("RGB")
 
     # fondo: foto desenfocada y oscurecida
@@ -176,13 +187,13 @@ def main(src, dst):
     bg.save(bg_path)
 
     # foto para el panel: cubre al menos PANEL_H de alto y W de ancho, con margen para el paneo
-    ps = max(PANEL_H * 1.12 / photo.height, (W + 100) / photo.width)
+    ps = max(PANEL_H * 2 * 1.12 / photo.height, (W * 2 + 200) / photo.width)  # al doble: se reduce despues
     pw, ph = int(photo.width * ps), int(photo.height * ps)
     panel = photo.resize((pw, ph), Image.LANCZOS)
     panel_path = os.path.join(tmp, "panel.jpg")
     panel.save(panel_path, quality=95)
-    max_x = pw - W
-    max_y = ph - PANEL_H
+    max_x = pw - W * 2
+    max_y = ph - PANEL_H * 2
 
     pasos = data["pasos"][:3]
     ing = as_lines(data["ingredientes"])[:9]
@@ -190,7 +201,7 @@ def main(src, dst):
 
     # portada a pantalla completa (zoom lento): la foto cubre 1080x1920 con margen
     HERO_H = 960
-    hs = max(HERO_H * 1.0 / photo.height, W * 1.0 / photo.width)
+    hs = max(HERO_H * 2.0 / photo.height, W * 2.0 / photo.width)
     hero = photo.resize((int(photo.width * hs), int(photo.height * hs)), Image.LANCZOS)
     hero_path = os.path.join(tmp, "hero.jpg")
     hero.save(hero_path, quality=95)
@@ -226,18 +237,18 @@ def main(src, dst):
         fin = "" if hero_scene else "fade=t=in:st=0:d=0.2,"
         bar_fx = f"[3:v]format=rgba[b];"
         end = (f"overlay=0:'{slide}'[x];"
-                f"[x][b]overlay=x='-{W}+{W}*({offset}+t)/{total}':y=0,scale=flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=bt709,format=yuv420p,"
+                f"[x][b]overlay=x='-{W}+{W}*({offset}+t)/{total}':y=0,scale=1440:2560:flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=bt709,format=yuv420p,"
                 f"{fin}fade=t=out:st={dur-0.2}:d=0.2[v]")
         if hero_scene:
             fc = (text_fx + bar_fx +
-                  f"[1:v]scale=w='iw*(1+0.04*t/{dur})':h=-1:eval=frame,crop={W}:{HERO_H},eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
+                  f"[1:v]scale=w='iw*(1+0.04*t/{dur})':h=-1:eval=frame:flags=lanczos,crop={W*2}:{HERO_H*2},scale={W}:{HERO_H}:flags=lanczos+accurate_rnd,eq=saturation=1.15:contrast=1.06,unsharp=5:5:0.8[h];"
                   f"[0:v][h]overlay=0:0[a];[a][t]" + end)
             inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
         else:
             x0, x1 = int(max_x * pan[0]), int(max_x * pan[1])
             y0p = max_y // 2
             fc = (text_fx + bar_fx +
-                  f"[1:v]crop={W}:{PANEL_H}:x='{x0}+({x1}-{x0})*t/{dur}':y={y0p},eq=saturation=1.12:contrast=1.05,unsharp=5:5:0.6[c];"
+                  f"[1:v]crop={W*2}:{PANEL_H*2}:x='{x0}+({x1}-{x0})*t/{dur}':y={y0p},scale={W}:{PANEL_H}:flags=lanczos+accurate_rnd,eq=saturation=1.12:contrast=1.05,unsharp=5:5:0.6[c];"
                   f"[0:v][c]overlay=0:{PANEL_Y}[a];[a][t]" + end)
             inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
         cmd = ["ffmpeg", "-y", "-loglevel", "error"] + inputs + [
@@ -245,7 +256,7 @@ def main(src, dst):
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", layer,
                "-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bar_path,
                "-filter_complex", fc, "-map", "[v]", "-r", "30",
-               "-c:v", "libx264", "-crf", "12", "-preset", "slow", "-pix_fmt", "yuv420p",
+               "-c:v", "libx264", "-crf", "12", "-preset", "slow", "-tune", "film", "-g", "60", "-pix_fmt", "yuv420p",
                "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", out]
         subprocess.run(cmd, check=True)
         files.append(out)
